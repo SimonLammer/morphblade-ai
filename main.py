@@ -87,8 +87,6 @@ def main():
       time.sleep(1.000)
       # break
 
-    listener.join()
-
 def on_press(key):
   global paused
   # import pdb; pdb.set_trace()
