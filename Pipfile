@@ -9,6 +9,7 @@ verify_ssl = true
 pyscreenshot = "*"
 pillow = "*"
 pynput = "*"
+numpy = "*"
 
 [requires]
 python_version = "3.6"
