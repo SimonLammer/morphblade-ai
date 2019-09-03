@@ -1,102 +1,80 @@
 #!/usr/bin/python3
 
 import sys
-import pyscreenshot as ImageGrab
+from datetime import datetime
 import time
-import pynput.mouse
+import random
 from pynput import keyboard
+import numpy as np
+from PIL import ImageDraw
 
 from ai.dqn import Dqn as Ai
+from game import Game
 
-BLACK = (0, 0, 0)
+MIN_PREDICTION_SIZE = 2
+MAX_PREDICTION_SIZE = 15
+PREDICTION_COLOR = "magenta"
 
-paused = False
+keep_running = True
 
 def main():
-  if len(sys.argv) < (1 + 4 + 2 + 1):
-    print(f"Usage: {sys.argv[0]} <x1> <y1> <x2> <y2> <cx> <cy> <inv_scale>") # 0 300 956 840 20 20 2
+  if len(sys.argv) < (1 + 4 + 1):
+    print(f"Usage: {sys.argv[0]} <x1> <y1> <x2> <y2> <scale>") # 0 300 956 840 1
     exit(1)
 
   application_bbox = tuple(int(i) for i in sys.argv[1 : 5])
-  application_height = application_bbox[3] - application_bbox[1]
-  application_width = application_bbox[2] - application_bbox[0]
-  application_scale = float(sys.argv[7])
-  scaled_application_size = (int(application_width / application_scale), int(application_height / application_scale))
-  print(f"Scaled application size: {scaled_application_size}")
-  stats_bbox = (
-    application_width / 24.5128,
-    application_height / 11.4894,
-    application_width / 9.56,
-    application_height / 6.352941176) # 32 33 170 100
-  previous_image = ImageGrab.grab(bbox=application_bbox)
-  previous_stats = previous_image.crop(box=stats_bbox)
-  previous_stats_pixels = previous_stats.load()
-
-  # previous_image.show()
+  board_scale = float(sys.argv[5])
+  game = Game(application_bbox, board_scale)
+  # game.demo_capture()
   print("If this screenshot did not capture the game, restart the application with adjusted arguments.")
+  # time.sleep(2)
 
-  mouse = pynput.mouse.Controller()
+  # exit(0)
+  
+  ai = Ai(game)
 
-  actions_x = int((int(sys.argv[3]) - int(sys.argv[1])) / int(sys.argv[5]))
-  actions_y = int((int(sys.argv[4]) - int(sys.argv[2])) / int(sys.argv[6]))
-  actions_count = actions_x * actions_y
-  ai = Ai(actions_count=actions_count)
+  listener = keyboard.Listener(on_press = on_press)
+  listener.start()
+  state = None
+  while keep_running:
+    if state is None or random.random() < 0.5:
+      action_index = int(random.random() * len(game.actions))
+    else:
+      prediction = ai.model.predict(state.reshape(-1, *state.shape))[0]
+      save(game, board, prediction)
+      action_index = max(enumerate(prediction), key=lambda e: e[1])[0]
 
-  with keyboard.Listener(
-    on_press = on_press
-  ) as listener:
-    while True:
-      if paused:
-        print(".", end="", flush=True)
-        time.sleep(0.5)
-        continue
-      image = ImageGrab.grab(bbox=application_bbox)
-      stats = image.crop(box=stats_bbox)
-      stats_pixels = stats.load()
+    scaled_board, reward, done, board = game.step(action_index)
+    state = ai.image_to_state(scaled_board)
+    print(reward, done)
+    if done:
+      print("Restarting")
+      game.restart()
+    # time.sleep(1)
+  listener.stop()
 
-      scaled_image = image.resize(scaled_application_size)
-      # scaled_image.show()
+def save(game, board, prediction):
+  im = board.copy()
+  draw = ImageDraw.Draw(im)
+  for i in range(len(game.actions)):
+    confidence = prediction[i]
+    action = list(game.actions[i])
+    for j in range(2):
+      action[j] -= game.board_bbox[j]
 
-      action = ai.process(image)
-      print(action, flush=True)
+    size = confidence * (MAX_PREDICTION_SIZE - MIN_PREDICTION_SIZE) + MIN_PREDICTION_SIZE
+    width = int(size / 5)
+    draw.line((action[0] + size, action[1] + size, action[0] - size, action[1] - size), fill = PREDICTION_COLOR)
+    draw.line((action[0] - size, action[1] + size, action[0] + size, action[1] - size), fill = PREDICTION_COLOR, width = width)
 
-      game_over = False
-      for x in range(stats.size[0]):
-        if stats_pixels[x, stats.size[1] - 1] == BLACK:
-          game_over = True
-          break
-      if game_over:
-        ai.game_over()
-        break # TODO: restart?
-      else:
-        next_level = False
-        for x in range(stats.size[0] - 1):
-          for y in range(stats.size[1] - 1):
-            if stats_pixels[x, y] != previous_stats_pixels[x, y]:
-              next_level = True
-              break
-          if next_level:
-            break
-        if next_level:
-          ai.next_level()
-
-      previous_image = image
-      previous_stats = stats
-      previous_stats_pixels = stats_pixels
-
-      time.sleep(1.000)
-      # break
+  im.save(f'output/predictions/{datetime.utcnow().strftime("%Y%m%dT%H%M%S")}.jpg')
 
 def on_press(key):
-  global paused
-  # import pdb; pdb.set_trace()
-  if hasattr(key, 'char'):
-    if key.char == 'i':
-      paused = False
-      print("Started AI (press 'o' to stop)")
-    elif key.char == 'o':
-      paused = True
-      print("Stopped AI")
+  global keep_running
+  if key == keyboard.Key.esc:
+    print("Halting due to ESC press", file=sys.stdout)
+    keep_running = False
+    return False
 
 if __name__ == '__main__':
   main()
