@@ -11,17 +11,17 @@ ACTION_OUTLINE = "magenta"
 BOARD_OUTLINE = "cyan"
 STATS_OUTLINE = "orange"
 
-DEFAULT_REWARD = -1
-GAME_OVER_REWARD = -25
-LEVEL_COMPLETE_REWARD = 100
+DEFAULT_REWARD = 0
+GAME_OVER_REWARD = -1
+LEVEL_COMPLETE_REWARD = 1
 
 
 BLACK = (0, 0, 0)
 
-ACTION_UPDATE_TIME = 0.45
-CLICK_TIME = 0.015
-MENU_CLICK_TIME = 0.015
-MENU_LOAD_TIME = 0.150
+ACTION_UPDATE_TIME = 0.6
+CLICK_TIME = 0.025
+MENU_CLICK_TIME = 0.025
+MENU_LOAD_TIME = 0.250
 MENU_POST_TIME = 0.5
 
 MOUSE = MouseController()
@@ -53,6 +53,7 @@ class Game:
       int(self.application_bbox[0] + self.application_width / 2.1292),
       int(self.application_bbox[1] + self.application_height / 2.44348))
     self._stats = None
+    self._reward = 0
 
     self._generate_actions()
     self.step(None)
@@ -129,11 +130,12 @@ class Game:
           reward = LEVEL_COMPLETE_REWARD
     
     self._stats = stats
+    self._reward += reward
     new_state = application.crop(box=self.board_bbox)
     scaled_new_state = new_state.resize((
       int(self.board_width * self.board_scale),
       int(self.board_height * self.board_scale)))
-    return scaled_new_state, reward, done, new_state
+    return scaled_new_state, self._reward, done, new_state
 
   def capture_screen(self):
     return ImageGrab.grab(bbox=application_bbox)
@@ -161,9 +163,12 @@ class Game:
       time.sleep(MENU_CLICK_TIME)
       MOUSE.release(MouseButton.left)
 
+      time.sleep(MENU_POST_TIME)
+
       stats = ImageGrab.grab(bbox=self.application_bbox).crop(box=self.stats_bbox).load()
       if not self._game_over(stats):
         self._stats = stats
+        self._reward = 0
         break
       print(cnt)
       if cnt > 3:

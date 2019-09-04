@@ -29,28 +29,42 @@ def main():
   print("If this screenshot did not capture the game, restart the application with adjusted arguments.")
   # time.sleep(2)
 
-  # exit(0)
-  
   ai = Ai(game)
+
+  # exit(0)
+
+  time.sleep(1) # Give user time to switch to application
 
   listener = keyboard.Listener(on_press = on_press)
   listener.start()
   state = None
   while keep_running:
-    if state is None or random.random() < 0.5:
-      action_index = int(random.random() * len(game.actions))
-    else:
-      prediction = ai.model.predict(state.reshape(-1, *state.shape))[0]
+    action_index, prediction = ai.act(state)
+    if prediction is not None:
+      print("save")
       save(game, board, prediction)
-      action_index = max(enumerate(prediction), key=lambda e: e[1])[0]
 
     scaled_board, reward, done, board = game.step(action_index)
-    state = ai.image_to_state(scaled_board)
-    print(reward, done)
+    next_state = ai.image_to_state(scaled_board)
+
+    # x = next_state.reshape(-1, *next_state.shape)
+    # y = np.array([1] + [0] * 36).reshape(1, -1)
+    # ai.model.fit(x, y, epochs=1)
+    # print(ai.model.predict(next_state.reshape(-1, *next_state.shape)))
+
+    if state is not None:
+      ai.remember(state, action_index, reward, next_state, done)
+      print(reward, done)
+
     if done:
       print("Restarting")
       game.restart()
-    # time.sleep(1)
+      ai.replay(32)
+      print(f"epsilon: {ai.epsilon}")
+    # time.sleep(3) # debug
+    state = next_state
+  ai.close()
+  
   listener.stop()
 
 def save(game, board, prediction):
