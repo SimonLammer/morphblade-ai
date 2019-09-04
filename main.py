@@ -41,7 +41,6 @@ def main():
   while keep_running:
     action_index, prediction = ai.act(state)
     if prediction is not None:
-      print("save")
       save(game, board, prediction)
 
     scaled_board, reward, done, board = game.step(action_index)

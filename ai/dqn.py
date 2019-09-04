@@ -34,16 +34,14 @@ class Dqn:
       self.memory = deque(maxlen = 2000)
     self.gamma = 0.95 # discount rate
     self.epsilon = 0.9 # exploration rate
-    self.epsilon_min = 0.01
+    self.epsilon_min = 0.1
     self.epsilon_decay = 0.995
     self.learning_rate = 0.001
-
-    state = self.image_to_state(self.game.step(None)[0])
     try:
       self.model = load_model(MODEL_FILE)
-      raise Exception() # debug
     except Exception as e:
       print(f"Could not load model. ex: {e}\nInitializing new model.")
+      state = self.image_to_state(self.game.step(None)[0])
       self.model = self.create_model(state.shape)
     finally:
       print(f"Input: {self.model.input_shape}")
@@ -55,7 +53,7 @@ class Dqn:
     self.model.save(MODEL_FILE)
   
   def image_to_state(self, image):
-    im = image.convert("L")
+    im = image # .convert("L")
     # im.show()
     arr = np.array(img_to_array(im)) / 255
     return arr
@@ -63,17 +61,22 @@ class Dqn:
   def create_model(self, input_shape):
     model = Sequential()
 
-    model.add(Conv2D(64, (7, 7), input_shape=input_shape, activation="relu"))
-    model.add(MaxPooling2D(2,2))
+    model.add(Conv2D(8, (3, 3), activation="relu", input_shape=input_shape))
+    model.add(Conv2D(16, (7, 7), strides=(2, 2), activation="relu"))
+    model.add(MaxPooling2D(3,3))
     model.add(Dropout(0.2))
 
-    model.add(Conv2D(256, (3, 3), activation="relu"))
+    model.add(Conv2D(32, (5, 5), activation="relu"))
+    model.add(Conv2D(64, (5, 5), activation="relu"))
     model.add(MaxPooling2D(2,2))
     model.add(Dropout(0.2))
 
     model.add(Flatten())
+
     model.add(Dense(64))
+    model.add(Dropout(0.1))
     model.add(Dense(len(self.game.actions), activation="softmax"))
+
     model.compile(loss="mse", optimizer=Adam(lr=self.learning_rate), metrics=['accuracy'])
 
     return model
