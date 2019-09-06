@@ -10,6 +10,7 @@ pyscreenshot = "*"
 pillow = "*"
 pynput = "*"
 numpy = "*"
+scipy = "*"
 
 [requires]
 python_version = "3.6"

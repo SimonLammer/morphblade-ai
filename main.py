@@ -7,12 +7,13 @@ import random
 from pynput import keyboard
 import numpy as np
 from PIL import ImageDraw
+from scipy.special import softmax
 
 from ai.dqn import Dqn as Ai
 from game import Game
 
 MIN_PREDICTION_SIZE = 2
-MAX_PREDICTION_SIZE = 15
+MAX_PREDICTION_SIZE = 10
 PREDICTION_COLOR = "magenta"
 
 keep_running = True
@@ -41,9 +42,9 @@ def main():
   while keep_running:
     action_index, prediction = ai.act(state)
     if prediction is not None:
-      save(game, board, prediction)
+      save(game, board, softmax(prediction))
 
-    scaled_board, reward, done, board = game.step(action_index)
+    scaled_board, reward, done, board, reward_delta = game.step(action_index)
     next_state = ai.image_to_state(scaled_board)
 
     # x = next_state.reshape(-1, *next_state.shape)
@@ -52,7 +53,7 @@ def main():
     # print(ai.model.predict(next_state.reshape(-1, *next_state.shape)))
 
     if state is not None:
-      ai.remember(state, action_index, reward, next_state, done)
+      ai.remember(state, action_index, reward, next_state, done, reward_delta)
       print(reward, done)
 
     if done:
@@ -77,7 +78,7 @@ def save(game, board, prediction):
 
     size = confidence * (MAX_PREDICTION_SIZE - MIN_PREDICTION_SIZE) + MIN_PREDICTION_SIZE
     width = int(size / 5)
-    draw.line((action[0] + size, action[1] + size, action[0] - size, action[1] - size), fill = PREDICTION_COLOR)
+    draw.line((action[0] + size, action[1] + size, action[0] - size, action[1] - size), fill = PREDICTION_COLOR, width = width)
     draw.line((action[0] - size, action[1] + size, action[0] + size, action[1] - size), fill = PREDICTION_COLOR, width = width)
 
   im.save(f'output/predictions/{datetime.utcnow().strftime("%Y%m%dT%H%M%S")}.jpg')

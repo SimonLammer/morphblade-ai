@@ -98,7 +98,7 @@ class Game:
 
   def step(self, action_index):
     done = False
-    reward = DEFAULT_REWARD
+    reward_delta = DEFAULT_REWARD
 
     if self._stats is not None:
       if action_index is not None:
@@ -116,7 +116,7 @@ class Game:
     if self._stats is not None:
       if self._game_over(stats):
         done = True
-        reward = GAME_OVER_REWARD
+        reward_delta = GAME_OVER_REWARD
       else:
         next_level = False
         for x in range(self.stats_width - 1):
@@ -127,15 +127,15 @@ class Game:
           if next_level:
             break
         if next_level:
-          reward = LEVEL_COMPLETE_REWARD
+          reward_delta = LEVEL_COMPLETE_REWARD
     
     self._stats = stats
-    self._reward += reward
+    self._reward += reward_delta
     new_state = application.crop(box=self.board_bbox)
     scaled_new_state = new_state.resize((
       int(self.board_width * self.board_scale),
       int(self.board_height * self.board_scale)))
-    return scaled_new_state, self._reward, done, new_state
+    return scaled_new_state, self._reward, done, new_state, reward_delta
 
   def capture_screen(self):
     return ImageGrab.grab(bbox=application_bbox)
