@@ -32,6 +32,7 @@ def main():
 
   ai = Ai(game)
 
+  ai.replay(32)
   # exit(0)
 
   time.sleep(1) # Give user time to switch to application
@@ -39,10 +40,12 @@ def main():
   listener = keyboard.Listener(on_press = on_press)
   listener.start()
   state = None
+  counter = -1
   while keep_running:
+    counter += 1
     action_index, prediction = ai.act(state)
     if prediction is not None:
-      save(game, board, softmax(prediction))
+      save(game, board, prediction)
 
     scaled_board, reward, done, board, reward_delta = game.step(action_index)
     next_state = ai.image_to_state(scaled_board)
@@ -52,26 +55,38 @@ def main():
     # ai.model.fit(x, y, epochs=1)
     # print(ai.model.predict(next_state.reshape(-1, *next_state.shape)))
 
-    if state is not None:
+    if state is not None and keep_running:
       ai.remember(state, action_index, reward, next_state, done, reward_delta)
       print(reward, done)
+
+    if counter % 1000 == 0:
+      ai.train(128, 12)
+    elif counter % 50 == 0:
+      ai.replay(512)
+      print(f"epsilon: {ai.epsilon}")
 
     if done:
       print("Restarting")
       game.restart()
-      ai.replay(32)
-      print(f"epsilon: {ai.epsilon}")
     # time.sleep(3) # debug
+
+    if ai.epsilon < 0.4:
+      ai.epsilon = 0.9
     state = next_state
   ai.close()
   
   listener.stop()
 
 def save(game, board, prediction):
+  min_ = min(prediction)
+  max_ = max(prediction)
+
+  normalized_prediction = [(e - min_) / (max_ - min_) for e in prediction]
+
   im = board.copy()
   draw = ImageDraw.Draw(im)
   for i in range(len(game.actions)):
-    confidence = prediction[i]
+    confidence = normalized_prediction[i]
     action = list(game.actions[i])
     for j in range(2):
       action[j] -= game.board_bbox[j]

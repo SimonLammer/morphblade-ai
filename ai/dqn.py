@@ -12,6 +12,7 @@ import tensorflow as tf
 import random
 from collections import deque
 import pickle
+import itertools
 
 from game import Game
 
@@ -23,20 +24,21 @@ np.random.seed(1)
 tf.set_random_seed(1)
 
 class Dqn:
-  def __init__(self, game, **kwargs):
+  def __init__(self, game, memory_file = MEMORY_FILE, **kwargs):
     self.game = game
+    self.memory_file = memory_file
 
     try:
-      with open(MEMORY_FILE, 'rb') as file:
+      with open(self.memory_file, 'rb') as file:
         self.memory = pickle.load(file)
     except Exception as e:
       print(f"Could not load memory. ex: {e}\nInitializing empty memory.")
-      self.memory = deque(maxlen = 5000)
+      self.memory = deque(maxlen = 25_000)
     self.gamma = 0.95 # discount rate
-    self.epsilon = 0.9 # exploration rate
-    self.epsilon_min = 0.1
-    self.epsilon_decay = 0.995
-    self.learning_rate = 0.001
+    self.epsilon = 0.95 # exploration rate
+    self.epsilon_min = 0.25
+    self.epsilon_decay = 0.998
+    self.learning_rate = 0.002
     try:
       self.model = load_model(MODEL_FILE)
       # raise Exception() # debug
@@ -49,7 +51,7 @@ class Dqn:
       self.model.summary()
   
   def close(self):
-    with open(MEMORY_FILE, 'wb') as file:
+    with open(self.memory_file, 'wb') as file:
       pickle.dump(self.memory, file)
     self.model.save(MODEL_FILE)
   
@@ -69,12 +71,10 @@ class Dqn:
 
     model.add(Conv2D(64, (5, 5), activation="relu"))
     model.add(MaxPooling2D(2,2))
-    model.add(Dropout(0.2))
 
     model.add(Flatten())
 
     model.add(Dense(128))
-    model.add(Dropout(0.1))
     model.add(Dense(len(self.game.actions), activation="linear"))
 
     model.compile(loss="mse", optimizer=Adam(lr=self.learning_rate), metrics=['accuracy'])
@@ -86,8 +86,9 @@ class Dqn:
       return random.randrange(len(self.game.actions)), None
     else:
       prediction = self.predict(state)
-      action_index = max(enumerate(prediction), key=lambda e: e[1])[0]
-      return action_index, prediction
+      action = max(enumerate(prediction), key=lambda e: e[1])
+      print(f"predicting reward of {action[1]}")
+      return action[0], prediction
   
   def predict(self, state):
     return self.model.predict(state.reshape(-1, *state.shape))[0]
@@ -96,17 +97,34 @@ class Dqn:
     self.memory.append((state, action, reward, next_state, done, reward_delta))
   
   def replay(self, batch_size):
-    if len(self.memory) < batch_size:
-      return
-    minibatch = random.sample(self.memory, batch_size)
-    for state, action, reward, next_state, done, reward_delta in minibatch:
-      target = reward
-      if not done:
-        target += self.gamma * np.amax(self.predict(next_state))
-      target_f = np.array(self.predict(state))
-      target_f[action] = target
-      self.model.fit(state.reshape(-1, *state.shape), target_f.reshape(1, -1), epochs = 1, verbose = 1)
+    len_memory = len(self.memory)
+    if len_memory < batch_size:
+      return False
+    self.train(batch_size, 1, list(itertools.islice(self.memory, len_memory - batch_size, len_memory)))
     print(f"Memory: {len(self.memory)}")
     self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
   
-  # def train(self, batch_size)
+  def train(self, batch_size, epochs = 1, memory = None):
+    if memory is None:
+      memory = self.memory
+    if len(memory) < batch_size:
+      return False
+
+    current_qs = self.model.predict(np.array([e[0] for e in memory]))
+    future_qs = self.model.predict(np.array([e[3] for e in memory]))
+
+    x = []
+    y = []
+
+    for index, (state, action, reward, next_state, done, reward_delta) in enumerate(memory):
+      q = reward_delta
+      if not done:
+        reward += self.gamma * np.amax(future_qs[index])
+      
+      qs = current_qs[index]
+      qs[action] = q
+
+      x.append(state)
+      y.append(qs)
+    
+    self.model.fit(np.array(x), np.array(y), batch_size = batch_size, shuffle = True, epochs = epochs)
