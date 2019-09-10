@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+import keras.backend as K
 from keras.models import Sequential, load_model
 from keras.layers import Dense, Dropout, Conv2D, MaxPooling2D, Activation, Flatten
 from keras.optimizers import Adam
@@ -49,6 +50,7 @@ class Dqn:
     finally:
       print(f"Input: {self.model.input_shape}")
       self.model.summary()
+    exit(0) # debug
   
   def close(self):
     with open(self.memory_file, 'wb') as file:
@@ -64,23 +66,26 @@ class Dqn:
   def create_model(self, input_shape):
     model = Sequential()
 
-    model.add(Conv2D(8, (9, 9), strides=(3, 3), activation="relu", input_shape=input_shape))
-    model.add(Conv2D(16, (7, 7), strides=(2, 2), activation="relu"))
-    model.add(MaxPooling2D(3,3))
-    model.add(Dropout(0.2))
-
-    model.add(Conv2D(64, (5, 5), activation="relu"))
+    model.add(Conv2D(32, (5, 5), strides=(2, 2), activation="relu", input_shape=input_shape))
     model.add(MaxPooling2D(2,2))
+    model.add(Dropout(0.1))
+    model.add(Conv2D(64, (3, 3), activation="relu"))
+    # model.add(MaxPooling2D(2,2))
+    model.add(Conv2D(128, (3, 3), activation="relu"))
+    model.add(MaxPooling2D(2,2))
+    # model.add(Conv2D(256, (5, 5), strides=(1, 1), activation="relu"))
+    model.add(Dropout(0.1))
 
     model.add(Flatten())
 
     model.add(Dense(128))
+    model.add(Dense(128))
     model.add(Dense(len(self.game.actions), activation="linear"))
 
-    model.compile(loss="mse", optimizer=Adam(lr=self.learning_rate), metrics=['accuracy'])
+    model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate), metrics=['accuracy'])
 
     return model
-  
+
   def act(self, state):
     if random.random() < self.epsilon or state is None:
       return random.randrange(len(self.game.actions)), None
