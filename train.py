@@ -21,7 +21,7 @@ def main():
 
   print(f"Memory size: {len(ai.memory)}")
 
-  ai.train(128, 16)
+  ai.train(256, 4)
 
   ai.close()
 

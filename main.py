@@ -32,7 +32,8 @@ def main():
 
   ai = Ai(game)
 
-  ai.replay(32)
+  # ai.replay(32)
+  # import pdb; pdb.set_trace()
   # exit(0)
 
   time.sleep(1) # Give user time to switch to application
@@ -59,8 +60,8 @@ def main():
       ai.remember(state, action_index, reward, next_state, done, reward_delta)
       print(reward, done)
 
-    if counter % 1000 == 0:
-      ai.train(128, 12)
+    if counter % 1000 == 500:
+      ai.train(128, 6)
     elif counter % 50 == 0:
       ai.replay(512)
       print(f"epsilon: {ai.epsilon}")

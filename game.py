@@ -151,6 +151,7 @@ class Game:
     return game_over
   
   def restart(self):
+    self._reward = 0
     cnt = 0
     while True:
       MOUSE.position = self.menu_coordinates
@@ -168,7 +169,6 @@ class Game:
       stats = ImageGrab.grab(bbox=self.application_bbox).crop(box=self.stats_bbox).load()
       if not self._game_over(stats):
         self._stats = stats
-        self._reward = 0
         break
       print(cnt)
       if cnt > 3:

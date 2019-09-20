@@ -4,7 +4,7 @@ import keras.backend as K
 from keras.models import Sequential, load_model
 from keras.layers import Dense, Dropout, Conv2D, MaxPooling2D, Activation, Flatten
 from keras.optimizers import Adam
-from keras.preprocessing.image import img_to_array
+from keras.preprocessing.image import img_to_array, ImageDataGenerator
 # from keras.callbacks import TensorBoard
 # from collections import deque
 import time
@@ -23,6 +23,10 @@ MODEL_FILE = 'output/dqn/model.h5'
 random.seed(1)
 np.random.seed(1)
 tf.set_random_seed(1)
+TF_SESSION = tf.Session(config=tf.ConfigProto(log_device_placement=True))
+from tensorflow.python.client import device_lib
+print(device_lib.list_local_devices())
+print(f"!!!!!!!!!! GPU? {tf.test.is_gpu_available()}")
 
 class Dqn:
   def __init__(self, game, memory_file = MEMORY_FILE, **kwargs):
@@ -34,12 +38,12 @@ class Dqn:
         self.memory = pickle.load(file)
     except Exception as e:
       print(f"Could not load memory. ex: {e}\nInitializing empty memory.")
-      self.memory = deque(maxlen = 25_000)
+      self.memory = deque(maxlen = 10_000)
     self.gamma = 0.95 # discount rate
     self.epsilon = 0.95 # exploration rate
     self.epsilon_min = 0.25
     self.epsilon_decay = 0.998
-    self.learning_rate = 0.002
+    self.learning_rate = 0.0001
     try:
       self.model = load_model(MODEL_FILE)
       # raise Exception() # debug
@@ -48,9 +52,11 @@ class Dqn:
       state = self.image_to_state(self.game.step(None)[0])
       self.model = self.create_model(state.shape)
     finally:
+      self.model.compile(loss='logcosh', optimizer=Adam(lr=self.learning_rate), metrics=['accuracy', 'mae', 'mse', 'mean_squared_logarithmic_error', 'hinge'])
       print(f"Input: {self.model.input_shape}")
+      # import pdb; pdb.set_trace()
       self.model.summary()
-    exit(0) # debug
+    # exit(0) # debug
   
   def close(self):
     with open(self.memory_file, 'wb') as file:
@@ -66,23 +72,24 @@ class Dqn:
   def create_model(self, input_shape):
     model = Sequential()
 
-    model.add(Conv2D(32, (5, 5), strides=(2, 2), activation="relu", input_shape=input_shape))
+    model.add(Conv2D(8, (5, 5), strides=(2, 2), activation="relu", input_shape=input_shape))
+    model.add(Conv2D(32, (3, 3), strides=(2, 2), activation="relu", input_shape=input_shape))
+    model.add(Conv2D(16, (1, 1), strides=(1, 1), activation="relu", input_shape=input_shape))
     model.add(MaxPooling2D(2,2))
     model.add(Dropout(0.1))
-    model.add(Conv2D(64, (3, 3), activation="relu"))
-    # model.add(MaxPooling2D(2,2))
-    model.add(Conv2D(128, (3, 3), activation="relu"))
+
+    model.add(Conv2D(64, (3, 3), strides=(1, 1), activation="relu", input_shape=input_shape))
+    model.add(Conv2D(128, (3, 3), strides=(1, 1), activation="relu", input_shape=input_shape))
+    model.add(Conv2D(32, (1, 1), strides=(1, 1), activation="relu", input_shape=input_shape))
     model.add(MaxPooling2D(2,2))
-    # model.add(Conv2D(256, (5, 5), strides=(1, 1), activation="relu"))
     model.add(Dropout(0.1))
 
     model.add(Flatten())
 
     model.add(Dense(128))
-    model.add(Dense(128))
+    model.add(Dense(512))
+    model.add(Dense(512))
     model.add(Dense(len(self.game.actions), activation="linear"))
-
-    model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate), metrics=['accuracy'])
 
     return model
 
@@ -124,12 +131,24 @@ class Dqn:
     for index, (state, action, reward, next_state, done, reward_delta) in enumerate(memory):
       q = reward_delta
       if not done:
-        reward += self.gamma * np.amax(future_qs[index])
+        q += self.gamma * np.amax(future_qs[index])
       
       qs = current_qs[index]
       qs[action] = q
 
       x.append(state)
       y.append(qs)
-    
-    self.model.fit(np.array(x), np.array(y), batch_size = batch_size, shuffle = True, epochs = epochs)
+
+    gen = ImageDataGenerator(width_shift_range=25, height_shift_range=20, fill_mode='nearest')
+
+    input_size = len(x)
+    train_size = int(input_size * 0.8)
+    validation_size = input_size - train_size
+    random.shuffle(x)
+    random.shuffle(y)
+    x_train = np.array(x[:train_size])
+    y_train = np.array(y[:train_size])
+    x_validation = np.array(x[-validation_size:])
+    y_validation = np.array(y[-validation_size:])
+    # self.model.fit(x, y, batch_size = batch_size, shuffle = True, epochs = epochs)
+    self.model.fit_generator(gen.flow(x_train, y_train, batch_size=batch_size), validation_data=(x_validation, y_validation), steps_per_epoch=(len(x) / batch_size), epochs=epochs)
